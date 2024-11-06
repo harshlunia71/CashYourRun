@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+
+{% block main %}
+
+    <h1>Register</h1>
+    <form action="/register" method="post">
+        <div id="alert"></div>
+        <div>
+            <input id="username" autocomplete="off" autofocus name="username" placeholder="Username" type="text">
+        </div>
+        <div>
+            <input autocomplete="off" name="password" placeholder="Password" type="password">
+        </div>
+        <div>
+            <input autocomplete="off" name="confirm_password" placeholder="Confirm Password" type="password">
+        </div>
+        <div>
+            <input type="submit" class="btn btn-primary btn-lg" value="Register">
+        </div>
+    </form>
+    <h2>Already have an account? <a class="btn btn-info" href="/login" role="button" type="button">Log In</a></h2>
+
+    <script>
+
+        document.addEventListener("DOMContentLoaded", function() {
+
+            var message = "{{ message }}";
+            if (!message) {
+                return 0;
+            }
+
+            var alertDiv = document.querySelector("#alert");
+            alertDiv.role = "alert";
+            alertDiv.className = "alert alert-danger";
+            alertDiv.innerHTML = message;
+
+            var savedUsername = "{{ savedUsername }}";
+            if (!savedUsername) {
+                return 1;
+            }
+
+            var usernameInput = document.querySelector("#username");
+            usernameInput.value = savedUsername;
+        });
+
+    </script>
+
+{% endblock %}

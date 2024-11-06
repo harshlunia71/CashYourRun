@@ -1,0 +1,462 @@
+{% extends "layout.html" %}
+
+{% block main %}
+
+    <div id = "runDivision">
+        <h1 id = "distanceHeading"></h1>
+        <p class = "large" id = "totalDistance"></p>
+
+        <h1 id = "timeHeading"></h1>
+        <p class = "large" id = "totalTime"></p>
+    </div>
+    <div id = "requestDivision">
+        <input class = "btn btn-primary" type = "button" id = "request" value = "Reuqest Permission" onClick = "blur();"></input>
+        <p>This page requires access to information related to your device's motion and orientation to measure your distance travelled accurately. If the request is denied, you will not be able to use all the features on this page. Please click the "Request Permission" to proceed.</p>
+    </div>
+    <p id = "rewardsDisp" class='large'></p>
+    <p id = 'test'></p>
+
+    <script src = "../static/node_modules/quaternion/quaternion.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+
+            document.addEventListener("touchstart", function(event) {
+                event.target.addEventListener('touchmove', function (event) {
+                    if (event.scale !== 1) {
+                        event.preventDefault();
+                    }
+                }, false);
+                event.target.addEventListener("touchend", function(event) {
+                    event.target.removeEventListener('touchmove', function (event) {
+                        if (event.scale !== 1) {
+                            event.preventDefault();
+                        }
+                    }, false);
+                });
+            });
+
+
+
+            /*
+            // Check for GeoLocation support on the current device
+            var geoLoc = navigator.geolocation;
+            if (!geoLoc) {
+                return 0;
+            }
+
+            var previousPos = [];
+            var currentPos = [];
+            var totalDistance = 0, distance = 0, R = 6378100;
+            // R is radius of Earth in meters
+
+            // Error when getting user's position
+            function error(e) {
+                alert('Error occurred. Error ' + e.code + ': ' + e.message);
+            }
+
+            // options for locating user
+            var options = {
+                enableHighAccuracy: true,
+            };
+
+            // Initialise starting position
+            geoLoc.getCurrentPosition(function(pos) {
+                previousPos.push(pos.coords.latitude);
+                previousPos.push(pos.coords.longitude);
+
+                console.log(previousPos[0]);
+                console.log(previousPos[1]);
+            }, error, options);
+
+            // To convert degrees to radiance
+            Number.prototype.toRad = function() {
+                return (this * Math.PI / 180);
+            };
+
+            // Canculates distance between 2 positions
+            function calcDist(p1, p2) {
+                document.querySelector("#angle").innerHTML = p1, p2;
+                return R * Math.acos(
+                    (Math.cos(p1[0].toRad()) * Math.cos(p2[0].toRad()) * Math.cos(p1[1].toRad() - p2[1].toRad())
+                    + Math.sin(p1[0].toRad()) * Math.sin(p2[0].toRad())).toFixed(7)
+                    );
+            }
+
+            // To update the distance travelled at each frame
+            function update(pos) {
+                console.log(pos.coords.accuracy);
+                // Recording current position
+                currentPos.push(pos.coords.latitude);
+                currentPos.push(pos.coords.longitude);
+
+                // Calculating distance between current and previous positions
+                distance = calcDist(previousPos, currentPos);
+
+                // Update previous position
+                previousPos = currentPos;
+                currentPos = [];
+            }
+
+            var updateInterval = setInterval(function() {
+                geoLoc.getCurrentPosition(update, error, options);
+                totalDistance += distance;
+                document.querySelector("#totalDist").innerHTML = totalDistance;
+            }, 100);
+            */
+
+            // Request access to device motion and orientation information
+            var RequestButton = document.querySelector("#request");
+            RequestButton.addEventListener("click", request);
+
+            // Refer to navigation bar
+            var navBar = document.querySelector('#navbar');
+
+            // Set properties of buttons on the page
+            var toggleRun = [["Stop run", "Start run"], ["btn btn-danger", "btn btn-success"]];
+            var toggleValue = 1;
+
+            // Initiating text to speech
+            var speech = new SpeechSynthesisUtterance();
+            var voices = window.speechSynthesis.getVoices();;
+            var voiceInterval = window.setTimeout(function() {
+                voices = window.speechSynthesis.getVoices();
+            }, 100);
+            var rewardsDisp = document.querySelector('#rewardsDisp');
+            var test = document.querySelector('#test');
+            // Types of rewards
+            var rewardTypes = {{ collectables | tojson }};
+            for (i in rewardTypes) {
+                rewardTypes[i]['earned'] = 0;
+            }
+            var startTime;
+            var restarted = true;
+
+            Number.prototype.toRad = function() {
+                return this * Math.PI / 180;
+            };
+
+            var distanceHandler = {
+                totalDistance: 0,
+                updateInterval: null,
+                distanceDisplay: document.querySelector("#totalDistance"),
+
+                // Variables to generate rewards
+                nextReward: {type: null, amount: 0}, nextGoal: 0,
+
+                // Use to measure time interval between movements of the device
+                T: 1/60, lastMoveT: 0,
+
+                // Quaternion to store orientation data of the device
+                q: new Quaternion(),
+
+                // Store state of the device
+                currentAcceleration: [],
+                data: {
+                    acceleration: [0, 0, 0],
+                    velocity: [0, 0, 0],
+                    displacement: [0, 0, 0],
+                },
+
+                // Returns magnitude of a vector
+                magnitude: function(Arr) {
+                    let Sum = 0;
+                    for (i of Arr) {
+                        Sum += Math.pow(i, 2);
+                    }
+                    return Math.pow(Sum, 0.5);
+                },
+
+                // Function for handling changes in orientation
+                orientationHandler: function(event) {
+                    distanceHandler.q = Quaternion.fromEuler(event.alpha.toRad(), event.beta.toRad(), event.gamma.toRad(), 'ZXY');
+                },
+
+                // Function to handle changes in device motion
+                motionHandler: function(event) {
+
+                    // Time period since the last time the device was moved
+                    distanceHandler.T = (Date.now() - distanceHandler.lastMoveT) / 1000;
+
+                    // Changing accelertion from device perspective to real perspective
+                    distanceHandler.currentAcceleration = distanceHandler.q.rotateVector(
+                                                                [event.acceleration.x,
+                                                                event.acceleration.y,
+                                                                event.acceleration.z]);
+
+                    // Check if motion of device is significant
+                    if (distanceHandler.magnitude(distanceHandler.currentAcceleration) < 0.2) {
+                        distanceHandler.currentAcceleration = [0, 0, 0];
+                        distanceHandler.data.velocity = [0, 0, 0];
+                    }
+                    // Calculate displacement and velocity
+                    for (i in distanceHandler.data.acceleration) {
+                        distanceHandler.data.displacement[i] = distanceHandler.data.velocity[i] * distanceHandler.T + 0.25 * (distanceHandler.data.acceleration[i] + distanceHandler.currentAcceleration[i]) * Math.pow(distanceHandler.T, 2);
+                        distanceHandler.data.velocity[i] += (distanceHandler.data.acceleration[i] + distanceHandler.currentAcceleration[i]) * 0.5 * distanceHandler.T;
+                    }
+
+                    // Displaying total distane travelled
+                    distanceHandler.totalDistance += distanceHandler.magnitude(distanceHandler.data.displacement);
+
+                    // Give rewards to user
+                    distanceHandler.rewardGenerator();
+
+                    // Update variables for next device movement
+                    distanceHandler.lastMoveT = Date.now();
+                    distanceHandler.data.acceleration = distanceHandler.currentAcceleration;
+                },
+
+                // Notify the user when they received a reward
+                rewardGenerator: function() {
+                    if (distanceHandler.nextGoal < distanceHandler.totalDistance) {
+
+                        if (distanceHandler.nextReward.type) {
+                            // Update number of collectables received
+                            for (i in rewardTypes) {
+                                if (rewardTypes[i]['type'] == distanceHandler.nextReward.type) {
+                                    rewardTypes[i]['earned'] += distanceHandler.nextReward.amount;
+                                    break;
+                                }
+                            }
+                            let msg = 'You received ' + distanceHandler.nextReward.amount + ' ' + distanceHandler.nextReward.type
+                            speak(msg);
+                        }
+
+                        // Display all rewards earned in this session
+                        rewardsDisp.innerHTML = '';
+                        for (i in rewardTypes) {
+                            rewardsDisp.innerHTML += 'You have earned ' + rewardTypes[i]['earned'] + ' ' + rewardTypes[i]['type'] + '<br>';
+                        }
+
+                        // Generate the type and amount of reward
+                        let all = [];
+                        for (i of rewardTypes) {
+                            all.push(i['type']);
+                        }
+                        distanceHandler.nextReward.type = all[Math.floor(Math.random() * all.length)];
+                        distanceHandler.nextReward.amount = Math.ceil(Math.random() * 9) + 1;
+                        /*
+                        if (distanceHandler.nextReward.type == "coins") {
+                            distanceHandler.nextReward.amount *= 10;
+                        }
+                        */
+
+                        // Generate next goal
+                        distanceHandler.nextGoal += (Math.ceil(Math.random() * 50) + 10) * 5;
+                        return;
+                    }
+                },
+
+                // Update the distance display
+                updateDisplay: function() {
+                    distanceHandler.distanceDisplay.innerHTML = (distanceHandler.totalDistance / 1000).toFixed(2) + "km";
+                },
+
+                // Start/stpo tracking distance
+                startORstop: function(start) {
+                    if (start) {
+                        distanceHandler.lastMoveT = Date.now();
+                        window.addEventListener("deviceorientation", distanceHandler.orientationHandler);
+                        window.addEventListener("devicemotion", distanceHandler.motionHandler);
+                        distanceHandler.updateInterval = window.setInterval(distanceHandler.updateDisplay, 500);
+                        return;
+                    }
+
+                    window.removeEventListener("deviceorientation", distanceHandler.orientationHandler);
+                    window.removeEventListener("devicemotion", distanceHandler.motionHandler);
+                    window.clearInterval(distanceHandler.updateInterval);
+                    return;
+                },
+            }
+
+            var timeHandler = {
+                totalTime: 0,
+                updateInterval: null,
+                timeDisplay: document.querySelector("#totalTime"),
+                newStart: true,
+
+                // Get time when user started their run
+                startTime: 0,
+
+                // Variables to generate rewards
+                nextReward: {type: null, amount: 0}, nextGoal: 0,
+
+                // Turns time into hour:minute:second format
+                HMS: function(TIME) {
+                    let hr = Math.floor(TIME / 3600).toString();
+                    let min = Math.floor(TIME / 60 - hr * 60).toString();
+                    let sec = Math.floor(TIME - hr * 3600 - min * 60).toString();
+                    return '0'.repeat(2 - hr.length) + hr + ":" + '0'.repeat(2 - min.length) + min + ":" + '0'.repeat(2 - sec.length) + sec;
+                },
+
+                // Update time taken on the display
+                updateDisplay: function() {
+                    timeHandler.timeDisplay.innerHTML = timeHandler.HMS(timeHandler.totalTime);
+                },
+
+                // Notify the user when they received a reward
+                rewardGenerator: function() {
+                    if (timeHandler.nextGoal < timeHandler.totalTime) {
+
+                        if (timeHandler.nextReward.type) {
+                            for (i in rewardTypes) {
+                                if (rewardTypes[i]['type'] == timeHandler.nextReward.type) {
+                                    rewardTypes[i]['earned'] += timeHandler.nextReward.amount;
+                                    break;
+                                }
+                            }
+                            let msg = 'You received ' + timeHandler.nextReward.amount + ' ' + timeHandler.nextReward.type
+                            speak(msg);
+                        }
+
+                        // Display all rewards earned in this session
+                        rewardsDisp.innerHTML = '';
+                        for (i in rewardTypes) {
+                            rewardsDisp.innerHTML += 'You have earned ' + rewardTypes[i]['earned'] + ' ' + rewardTypes[i]['type'] + '<br>';
+                        }
+
+                        // Generate the type and amount of reward
+                        let all = [];
+                        for (i of rewardTypes) {
+                            all.push(i['type']);
+                        }
+                        timeHandler.nextReward.type = all[Math.floor(Math.random() * all.length)];
+                        timeHandler.nextReward.amount = Math.ceil(Math.random() * 9) + 1;
+                        /*
+                        if (timeHandler.nextReward.type == "coins") {
+                            timeHandler.nextReward.amount *= 10;
+                        }
+                        */
+
+                        // Generate next goal
+                        timeHandler.nextGoal += (Math.ceil(Math.random() * 50) + 10);
+                        return;
+                    }
+                },
+
+                // Calculates elapsed time since start time
+                elapsedTime: function() {
+                    timeHandler.totalTime = (Date.now() - timeHandler.startTime)/1000;
+                    timeHandler.updateDisplay();
+                    timeHandler.rewardGenerator();
+                },
+
+                // Start/stop time tracking
+                startORstop: function(start) {
+                    if (start) {
+                        if (timeHandler.newStart) {
+                            timeHandler.startTime = Date.now();
+                            timeHandler.newStart = false;
+                        }
+
+                        timeHandler.updateInterval = window.setInterval(timeHandler.elapsedTime, 500);
+                        return;
+                    }
+                    window.clearInterval(timeHandler.updateInterval);
+                    return;
+                },
+            }
+
+            function Main(granted) {
+
+                let requestDivision = document.querySelector("#requestDivision");
+                requestDivision.remove();
+
+                let runDivison = document.querySelector("#runDivision");
+
+                var startORstopButton = document.createElement("input");
+                startORstopButton.type = "button";
+                startORstopButton.value = toggleRun[0][toggleValue];
+                startORstopButton.className = toggleRun[1][toggleValue];
+                runDivision.appendChild(startORstopButton);
+
+                var restartButton = document.createElement("input");
+                restartButton.type = "button";
+                restartButton.value = "Reset Run";
+                restartButton.className = "btn btn-warning";
+                runDivision.appendChild(restartButton);
+
+                startORstopButton.addEventListener("click", function() {
+                    // Remove highlight from button after being clicked
+                    startORstopButton.blur();
+
+                    if (restarted) {
+                        startTime = Date.now();
+                        restarted = !restarted;
+
+                        // Block all links until the run gets restarted
+                        navBar.innerHTML = '<ul class="navbar-nav ml-auto mt-2"><li class = "nav-iten">Please Reset your run to be able to navigate to other pages<li></ul>'
+                    }
+
+                    timeHandler.startORstop(toggleValue);
+                    if (granted) {
+                        distanceHandler.startORstop(toggleValue);
+                    }
+                    toggleValue = (toggleValue + 1) % 2;
+                    startORstopButton.value = toggleRun[0][toggleValue];
+                    startORstopButton.className = toggleRun[1][toggleValue];
+                });
+
+                restartButton.addEventListener("click", function() {
+
+                    if (restarted) {
+                        return 0;
+                    }
+                    let userData = {
+                        timestamp: startTime,
+                        distance: distanceHandler.totalDistance,
+                        time: timeHandler.totalTime,
+                        rewards: rewardTypes,
+                    };
+
+                    $.ajax({
+                        type: 'POST',
+                        contentType: 'application/json',
+                        url: '/run',
+                        dataType: 'json',
+                        data: JSON.stringify(userData),
+                        success: function(data) {
+                            location.reload();
+                        }
+                    });
+                });
+
+                document.querySelector("#timeHeading").innerHTML = "Total Time";
+                timeHandler.updateDisplay();
+
+                if (granted) {
+                    document.querySelector("#distanceHeading").innerHTML = "Total Distance";
+                    distanceHandler.updateDisplay();
+                }
+            }
+
+            function request() {
+                DeviceMotionEvent.requestPermission().then(function(response) {
+
+                    if (response == "granted") {
+                        // Introduce purpose of the page
+                        speak("Click Start Run to begin your run. You may take any route of your choice and find coins to collect");
+                        Main(true);
+                    }
+                    else if (response == "denied") {
+                        // Introduce purpose of the page
+                        speak("Click Start Run to begin your run. You may take any route of your choice and find coins to collect");
+                        Main(false);
+                    }
+                });
+            }
+
+            // Convert text-to-speech
+            function speak(text) {
+                speech.lang = "en";
+                speech.volume = 1;
+                speech.pitch = 1;
+                speech.rate = 1;
+                speech.text = text;
+                speech.voice = voices[9];
+                window.speechSynthesis.speak(speech);
+            }
+        });
+    </script>
+
+{% endblock %}

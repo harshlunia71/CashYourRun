@@ -1,0 +1,401 @@
+{% extends "layout.html" %}
+
+{% block main %}
+    <div>
+        <canvas id="game">Your device cannot load this page</canvas>
+    </div>
+    <div>
+        <h3>Jump using the Space Bar, Up Arrow or Left Mouse Button</h3>
+    </div>
+    <!--
+    <input class = "btn btn-outline-primary" id="jump" type = "button" value = "Jump"></input>
+    -->
+    <div>
+        <input class = "btn btn-outline-success" id = "play" type = "button" value = "Play Again" onClick = "blur();"></input>
+    </div>
+    <script>
+
+        document.addEventListener("DOMContentLoaded", function() {
+
+            // Reference canvas element and its contex
+            var Canvas = document.querySelector("#game");
+            var ctx = Canvas.getContext('2d');
+
+            // Check if the context does not exist
+            if (!ctx) {
+                return 0;
+            }
+
+            // Adjusting size of canvas
+            let cWidth = Canvas.parentElement.clientWidth * 0.8;
+            let cHeight = Canvas.parentElement.clientHeight * 0.9;
+            Canvas.style.width = cWidth + "px";
+            Canvas.style.height = cHeight + "px";
+            var scale = window.devicePixelRatio;
+            Canvas.width = Math.floor(cWidth * scale);
+            Canvas.height = Math.floor(cHeight * scale);
+
+            // Request animation frame (stores each frame to be drawn)
+            var RAF;
+
+            // Initialisation
+            const canvasWidth = Canvas.width;
+            const canvasHeight = Canvas.height;
+            const jumpFactor = 1.8;
+            const g = jumpFactor * 0.15 * canvasHeight / 200;
+            const groundLevel = 0.75 * canvasHeight;
+            var gameSpeed = 5;
+            var totalDistance = 0;
+            var Pressed = {};
+            var allEntities = {};
+            var runGame = true;
+            var userItems = {{ userItems | tojson }};
+
+            // Define Player
+            let Player = {
+                x: 0.1 * canvasWidth, y: 0.5 * canvasHeight, Velocity: 0,
+                w: 0.15 * canvasHeight, h: 0.15 * canvasHeight,
+                color: 'rgb(0, 0, 0)',
+                landed: false,
+
+                // to draw a player
+                draw: function() {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.w, this.h);
+                },
+
+                // Control jump of player
+                jump: function() {
+
+                    if (Player.landed) {
+                        Player.Velocity = -jumpFactor * Player.w / 20;
+                    }
+                    else if (Player.Velocity < 0) {
+                        Player.Velocity -= 3 * jumpFactor * Player.w / 800;
+                    }
+                },
+
+                // Update player's position each frame
+                update: function() {
+
+                    let Objects = allEntities['gObs'].slice();
+                    Objects.push(ground);
+
+                    for(object of Objects) {
+
+                        if ((Player.x + Player.w >= object.x)
+                        && (Player.x <= object.x + object.w)
+                        && (Player.y + Player.h <= object.y)
+                        && (Player.y + Player.h + Player.Velocity + g >= object.y)) {
+
+                            Player.landed = true;
+                            Player.Velocity = 0;
+                            Player.y = object.y - Player.h;
+                            return;
+                        }
+                    }
+
+                    Player.landed = false;
+                    Player.Velocity += g;
+                    Player.y += Player.Velocity;
+                },
+            };
+
+            // Define Ground obstacles
+            class gObs {
+
+                constructor()
+                {
+                    // Generate random height of obstacle
+                    this.h = Math.ceil(Math.random() * 4) * 0.05 * canvasHeight;
+
+                    // Declaration of other attributes of object
+                    this.x = canvasWidth;
+                    this.Velocity = -gameSpeed;
+                    this.y = groundLevel - this.h;
+                    this.w = 0.1 * canvasHeight;
+                    this.color = 'rgb(50, 50, 20)';
+                    this.collided = false;
+                }
+
+                draw()
+                {
+                    // Create obstacle
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.w, this.h);
+                }
+
+                // Update position of obstacle
+                update()
+                {
+                    if ((this.y < Player.y + Player.h)
+                    && (this.x >= Player.x + Player.w)
+                    && (this.x + this.Velocity <= Player.x + Player.w)) {
+
+                        this.collided = true;
+                        gameSpeed = 0;
+                        this.x = Player.x + Player.w;
+                        return;
+                    }
+                    else if (this.collided) {
+                        gameSpeed = 5;
+                    }
+
+                    // Update velocity
+                    this.Velocity = -gameSpeed;
+                    this.collided = false;
+                    this.x += this.Velocity;
+                }
+            }
+
+            // Define clouds
+            class Cloud {
+
+                constructor()
+                {
+                    this.x = canvasWidth;
+                    this.y = Math.ceil(Math.random() * Math.floor(0.2 * canvasHeight));
+                    this.Velocity = -gameSpeed/10;
+                    this.w = 0.2 * canvasWidth;
+                    this.h = 0.2 * canvasHeight;
+                    this.color = 'rgb(255, 255, 255)';
+                }
+
+                draw()
+                {
+                    // Create clouds
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.w, this.h);
+                }
+
+                update()
+                {
+                    this.Velocity = -gameSpeed/10;
+                    this.x += this.Velocity;
+                }
+            }
+
+            // clear screen for each frame
+            function clearCanvas() {
+                ctx.fillStyle = 'rgp(255, 255, 255)';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            }
+
+            // Draw game over screen
+            function GameOver() {
+
+                window.clearInterval(gObsTimer);
+                window.clearInterval(CloudTimer);
+                window.clearInterval(gameSpeedInterval);
+                document.removeEventListener("keydown", keyHandler);
+                document.removeEventListener("keyup", keyHandler);
+
+                ctx.fillStyle = "rgb(120, 81, 169)";
+                ctx.lineWidth = 0.01 * canvasWidth;
+                ctx.fillRect(0.1 * canvasWidth, 0.1 * canvasHeight, 0.8 * canvasWidth, 0.8 * canvasHeight);
+
+                ctx.strokeStyle = "rgb(0, 0, 0)";
+                ctx.strokeRect(0.1 * canvasWidth, 0.1 * canvasHeight, 0.8 * canvasWidth, 0.8 * canvasHeight);
+
+                ctx.textAlign = "center";
+                ctx.font = 0.25 * canvasHeight + "px DejaVu Sans Mono, monospace	";
+                ctx.fillStyle = "rgb(0, 0, 0)";
+                ctx.fillText("Game Over", canvasWidth/2, 0.4 * canvasHeight);
+
+                Player.x = 0.5 * (canvasWidth - Player.w);
+                Player.y = 0.55 * canvasHeight;
+                Player.draw();
+            }
+
+            // Defining the sky as an object
+            var Sky = {
+                x: 0, y: 0,
+                w: canvasWidth, h: groundLevel,
+                color: 'rgb(135, 206, 235)',
+
+                // Draws the sky
+                draw: function() {
+                    ctx.fillStyle = Sky.color;
+                    ctx.fillRect(Sky.x, Sky.y, Sky.w, Sky.h);
+                },
+            };
+
+            // Defining the ground as an object
+            var ground = {
+                x: 0, y: groundLevel,
+                w: canvasWidth, h: canvasHeight - groundLevel,
+                color: 'rgb(50, 205, 50)',
+
+                // Draws the ground
+                draw: function() {
+                    ctx.fillStyle = ground.color;
+                    ctx.fillRect(ground.x, ground.y, ground.w, ground.h);
+                }
+            };
+
+            // Defining a tolerance meter
+            var tolerance = {
+                x: 0.75 * canvasWidth, y: 0.05 * canvasHeight,
+                w: 0.18 * canvasWidth, h: 0.1 * canvasHeight,
+                lost: 0, totalTime: Math.pow(2, userItems[0]['level']),
+                fill: 'rgb(237, 145, 33)', stroke: 'rgb(0, 0, 0)',
+                strokeWidth: 2,
+
+                // Draw a tolerance meter on screen
+                draw: function() {
+                    ctx.fillStyle = tolerance.fill;
+                    ctx.fillRect(tolerance.x, tolerance.y, tolerance.w - tolerance.lost, tolerance.h);
+
+                    ctx.strokeStyle = tolerance.stroke;
+                    ctx.lineWidth = tolerance.strokeWidth;
+                    ctx.strokeRect(tolerance.x, tolerance.y, tolerance.w, tolerance.h);
+                },
+
+                // Update the tolerance meter
+                update: function() {
+                    if (!gameSpeed && tolerance.lost < tolerance.w) {
+                        tolerance.lost += tolerance.w/ (30 * tolerance.totalTime);
+                    }
+                    else if (tolerance.lost >= tolerance.w) {
+                        runGame = false;
+                    }
+                },
+            };
+
+            // Draws each frame of the canvas
+            function drawFrame() {
+
+                // Reseting canvas
+                clearCanvas();
+
+                // Draw sky, clouds and ground
+                Sky.draw();
+                ground.draw();
+                for (cloud of Clouds) {
+                    cloud.draw();
+                }
+
+                // Draw all entities
+                for (entityType in allEntities) {
+                    for (e of allEntities[entityType]) {
+                        e.draw();
+                    }
+                }
+
+                // Draw the tolerance meter
+                tolerance.draw();
+
+                // Check if Space (32) or UpArrow (38) or left mouse button are pressed to trigger jump
+                if (Pressed[32] || Pressed[38] || Pressed['LMB']) {
+                    Player.jump();
+                }
+
+                // Update clouds
+                for (i in Clouds) {
+                    if (Clouds[i].x + Clouds[i].w >= 0) {
+                        Clouds[i].update();
+                    }
+                    else {
+                        delete Clouds[i];
+                        Clouds.splice(i, 1);
+                    }
+                }
+
+                // Update all entities
+                for (entityType in allEntities) {
+                    for (i in allEntities[entityType]) {
+                        if (allEntities[entityType][i].x + allEntities[entityType][i].w >= 0) {
+                            allEntities[entityType][i].update();
+                        }
+                        else {
+                            delete allEntities[entityType][i];
+                            allEntities[entityType].splice(i, 1);
+                        }
+                    }
+                }
+
+                // Update tolerance meter
+                tolerance.update();
+
+                // measure total distance travlled
+                totalDistance += gameSpeed;
+
+                if (runGame) {
+                    // Request next animation frame from the draw function
+                    RAF = window.requestAnimationFrame(drawFrame);
+                }
+                else {
+                    // Show game over screen
+                    GameOver();
+                }
+            }
+
+            // Requesting next frame from draw function
+            RAF = window.requestAnimationFrame(drawFrame);
+
+            // Log all buttons that are being presesed
+            function keyHandler(event) {
+                if (event.type == "keydown") {
+                    Pressed[event.keyCode] = true;
+                    return;
+                }
+                Pressed[event.keyCode] = false;
+                return;
+            }
+            document.addEventListener("keydown", keyHandler);
+            document.addEventListener("keyup", keyHandler);
+
+
+            // Log when the left mouse button (LMB) is clicked
+            document.addEventListener("mousedown", function() {
+                Pressed['LMB'] = true;
+            });
+
+            document.addEventListener("mouseup", function() {
+                Pressed['LMB'] = false;
+            });
+
+            // Adding player to list of all entities
+            allEntities['Player'] = [Player];
+
+            // Generating obstacles at random time intervals
+            allEntities['gObs'] = [];
+            var newgObs;
+            function gObsCreator() {
+                window.setTimeout(function() {
+                    newgObs = new gObs();
+                    allEntities['gObs'].push(newgObs);
+                }, Math.ceil(Math.random() * 1500));
+            }
+            var gObsTimer = setInterval(gObsCreator, 1000);
+
+            // Generating clouds
+            var Clouds = [];
+            var newCloud;
+            function CloudCreator() {
+                window.setTimeout(function() {
+                    newCloud = new Cloud();
+                    Clouds.push(newCloud);
+                }, Math.ceil(Math.random() * 7500 / gameSpeed));
+            }
+            var CloudTimer = setInterval(CloudCreator, 1000);
+
+
+            // Increasing speed of game over time
+            function gameSpeedHandler() {
+                gameSpeed += 0.5;
+            }
+            var gameSpeedInterval = setInterval(gameSpeedHandler, 5000);
+
+            // Play Again
+            var PlayButton = document.querySelector("#play");
+            function restartGame() {
+                location.reload();
+            }
+            PlayButton.addEventListener("click", restartGame);
+
+        });
+
+    </script>
+
+{% endblock %}

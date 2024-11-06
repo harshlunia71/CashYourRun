@@ -1,0 +1,82 @@
+body
+{
+    background-color: black;
+    color: white;
+}
+
+.large
+{
+    font-size: 25px;
+}
+
+#play
+{
+    margin-left: 10%;
+    width: 20%;
+}
+
+.shop
+{
+    width: 80%;
+    height: 80%;
+}
+
+canvas
+{
+    margin-left: 10%;
+    margin-top: 5%;
+}
+
+.marginTop
+{
+    margin-top: 5%;
+}
+
+.main td
+{
+    padding: 0.5% 5%;
+    text-align: justify;
+}
+
+.center-th th
+{
+    text-align: center;
+}
+
+.center
+{
+    text-align: center;
+}
+
+nav .navbar-brand
+{
+    /* size for brand */
+    font-size: xx-large;
+}
+
+/* Colors for brand */
+nav .navbar-brand .blue
+{
+    background-color: #4d4dff;
+}
+nav .navbar-brand .red
+{
+    background-color: #dc143c;
+}
+
+.bgYellow
+{
+    background-color: #e0b700;
+}
+
+.bordered th,.bordered td
+{
+    border: 1px solid white;
+    border-collapse: collapse;
+}
+
+#history
+{
+    margin-left: 5%;
+    width: 90%;
+}

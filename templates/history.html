@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+
+{% block main %}
+
+    <h1 class = 'center marginTop'>History</h1>
+    <table id = "history" class='center-th bordered main marginTop'></table>
+    <div id="errDiv"></div>
+
+    <script>
+
+        document.addEventListener("DOMContentLoaded", function() {
+
+            // Assign a variable to the log of user's runs
+            var runLog = {{ run_log | tojson }};
+
+            // Display error message if there is no run log
+            if (!(runLog.length)) {
+                var errMsg = document.createElement("h5");
+                errMsg.className = "center";
+                errMsg.innerHTML = "You do not have any history on this site. <br> Please <br> <a class='btn btn-info' href='/register' role='button' type='button'>Register</a> to create a new account <br> or <br> <a class='btn btn-info' href='/login' role='button' type='button'>Log In</a> to an existing account <br> And <br> Visit <a class='btn btn-info' href='/run' role='button' type='button'>Run and Collect</a> to help us keep a record of your runs";
+                var errDiv = document.querySelector("#errDiv");
+                errDiv.appendChild(errMsg);
+                return 0;
+            }
+
+            // Initialise the headings of the table
+            var historyTable = document.querySelector("#history");
+            historyTable.innerHTML = '<tr><th>Time of run</th><th>Distance Travelled</th><th>Duration of Run</th></tr>';
+
+            // Enter all the recorded runs
+            for (i of runLog) {
+
+                // Format timestamp, distance and time for current row
+                let this_timestamp = new Date(i["timestamp"]).toString();
+                let this_distance = (i["distance"] / 1000).toFixed(2).toString() + 'km';
+                let this_milliseconds = new Date(i["time"] * 1000);
+                console.log(this_milliseconds);
+                let this_time = this_milliseconds.getUTCHours() + "hr " + this_milliseconds.getUTCMinutes() + "min " + this_milliseconds.getUTCSeconds() + "s";
+
+                // Add each row to table
+                historyTable.innerHTML += "<tr><td>" + this_timestamp +"</td><td>" + this_distance + "</td><td>" + this_time + "</td></tr>";
+            }
+        });
+
+
+    </script>
+
+{% endblock %}
